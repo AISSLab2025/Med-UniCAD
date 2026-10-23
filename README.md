@@ -12,11 +12,39 @@ FreqXperts (low-to-high, mid-to-high, high-to-mid, and high-to-low), an identity
 route, factorized content/task/modality conditioning, and dense softmax routing
 at C2, C3, and C4.
 
+## Architecture
+
+![Med-UniCAD architecture](docs/assets/medunicad_architecture.png)
+
+The released model accepts X-ray, CT, MRI, and ultrasound images through a
+shared Swin-Tiny encoder. At the selected encoder stages, fixed Gaussian filters
+separate low-, mid-, and high-spatial-frequency components. MoFX-Dense then
+combines four directed frequency experts and an identity route using dense
+weights conditioned on image content, task, and modality. The routed features
+are consumed by segmentation, detection, classification, and LLM-based report
+generation heads.
+
+The figure presents the complete system context described in the manuscript.
+This repository implements the imaging backbone, MoFX-Dense routing, prediction
+heads, report generation, and explicit-task inference API. The agentic
+orchestration layer shown at the bottom of the figure is not included in this
+release and is planned as a separate interface module.
+
+### Supported pathways
+
+| Modality | Released prediction pathways |
+|---|---|
+| X-ray | Segmentation, multilabel finding classification, report generation |
+| CT | Classification, report generation |
+| MRI | Segmentation, lumbar-level detection, severity classification, report generation |
+| Ultrasound | Lesion segmentation, BI-RADS classification, pathology classification, morphology-aware report generation |
+
 ## Repository layout
 
 ```text
 configs/                 Paper training and inference configuration
-docs/                    Code-to-paper map and API guide
+docs/                    Code-to-paper map, figures, and API guide
+  assets/                Architecture and qualitative figures used in this README
 scripts/                 Training, inference, serving, and validation CLIs
 src/medunicad/
   modeling/              Final public model and checkpoint-compatible components
@@ -88,6 +116,26 @@ automatically adds prerequisite tasks when a requested output depends on
 segmentation or detection evidence.
 
 For HTTP serving, see `docs/api_usage.md`.
+
+## Qualitative examples
+
+The following manuscript examples summarize the released model's multitask
+outputs. They show breast-ultrasound and chest-X-ray segmentation, lumbar-MRI
+segmentation and level detection, and the use of structured visual evidence for
+report generation.
+
+![Qualitative segmentation and detection outputs](docs/assets/qualitative_task_outputs.png)
+
+*Representative segmentation and detection outputs across ultrasound, X-ray,
+and lumbar MRI tasks.*
+
+![Qualitative cross-modality predictions and generated reports](docs/assets/qualitative_report_generation.png)
+
+*Representative ultrasound, X-ray, CT, and MRI predictions with visual
+evidence, reference reports, and model-generated reports.*
+
+These examples are provided to illustrate the research pipeline and are not a
+substitute for clinical review.
 
 ## Reproducibility notes
 

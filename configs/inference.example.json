@@ -1,0 +1,170 @@
+{
+  "checkpoint_path": "../checkpoints/best_model.pth",
+  "dino_repo_path": "../third_party/DINO",
+  "dino_cfg_path": "../third_party/DINO/config/DINO/DINO_4scale_swin.py",
+  "dino_pretrained_path": "../third_party/DINO/pretrained/checkpoint0029_4scale_swin.pth",
+  "medclip_path": "../checkpoints/pytorch_model.bin",
+  "llm_model_name": "meta-llama/Llama-3.2-1B-Instruct",
+  "output_root": "../outputs/inference",
+  "device": "cuda",
+  "target_size": [
+    224,
+    224
+  ],
+  "use_amp": true,
+  "modality_map": {
+    "CT": 0,
+    "MRI": 1,
+    "Ultrasound": 2,
+    "XRay": 3
+  },
+  "class_names": [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Consolidation",
+    "Edema",
+    "Enlarged_Cardiomediastinum",
+    "Fracture",
+    "Lung_Lesion",
+    "Lung_Opacity",
+    "No_Finding",
+    "Pleural_Effusion",
+    "Pleural_Other",
+    "Pneumonia",
+    "Pneumothorax",
+    "Severe Stenosis",
+    "Stenosis",
+    "Support_Devices",
+    "hemorrhage"
+  ],
+  "classification_classes_by_modality": {
+    "xray": [
+      "Atelectasis",
+      "Cardiomegaly",
+      "Consolidation",
+      "Edema",
+      "Enlarged_Cardiomediastinum",
+      "Fracture",
+      "Lung_Lesion",
+      "Lung_Opacity",
+      "No_Finding",
+      "Pleural_Effusion",
+      "Pleural_Other",
+      "Pneumonia",
+      "Pneumothorax",
+      "Support_Devices"
+    ],
+    "ct": [
+      "No_Finding",
+      "hemorrhage"
+    ],
+    "mri": [
+      "No_Finding",
+      "Stenosis",
+      "Severe Stenosis"
+    ],
+    "ultrasound": []
+  },
+  "segmentation_class_names": [
+    "IVD",
+    "Posterior_A",
+    "Posterior_B",
+    "anterior_background",
+    "lesion",
+    "lung",
+    "sacrum",
+    "vertebrae"
+  ],
+  "segmentation_classes_by_modality": {
+    "xray": [
+      "lung"
+    ],
+    "ct": [],
+    "mri": [
+      "IVD",
+      "Posterior_A",
+      "Posterior_B",
+      "anterior_background",
+      "sacrum",
+      "vertebrae"
+    ],
+    "ultrasound": [
+      "lesion"
+    ]
+  },
+  "detection_class_names": [
+    "L1-L2",
+    "L2-L3",
+    "L3-L4",
+    "L4-L5",
+    "L5-S1"
+  ],
+  "severity_class_names": [
+    "Normal",
+    "Stenosis",
+    "Severe Stenosis"
+  ],
+  "severity_class_indices": [
+    8,
+    14,
+    13
+  ],
+  "birads_class_names": [
+    "2",
+    "3",
+    "4",
+    "5"
+  ],
+  "pathology_class_names": [
+    "benign",
+    "malignant"
+  ],
+  "segmentation_threshold": 0.5,
+  "classification_threshold": 0.5,
+  "detection_score_threshold": 0.3,
+  "detection_nms_iou": 0.4,
+  "detection_topk": 20,
+  "birads_thresholds": null,
+  "use_moe": true,
+  "moe_type": "gradif",
+  "gradif_routing_mode": "dense_soft",
+  "gradif_expert_bank_type": "freqxpert",
+  "gradif_decomposition": "gaussian_fixed",
+  "gradif_active_stages": [
+    "c2",
+    "c3",
+    "c4_semantic"
+  ],
+  "gradif_include_generalist": false,
+  "gradif_include_null_expert": true,
+  "gradif_top_k": 2,
+  "gradif_temperature": 1.5,
+  "gradif_router_strategy": "factorized_multigate",
+  "gradif_router_alpha_content_init": 0.5,
+  "gradif_router_alpha_task_init": 0.25,
+  "gradif_router_alpha_modality_init": 0.25,
+  "gradif_router_task_specific_gates": true,
+  "gradif_router_modality_specific_gates": true,
+  "gradif_router_modality_content_adapters": true,
+  "gradif_router_branch_hidden": 96,
+  "gradif_router_task_residual_scale": 0.1,
+  "gradif_router_modality_residual_scale": 0.1,
+  "gradif_router_attention_pool": true,
+  "gradif_router_mi_min_group_size": 4,
+  "gradif_router_mi_queue_size": 32,
+  "gradif_router_mi_current_fraction": 0.5,
+  "gradif_gamma_init": 0.015,
+  "gradif_gamma_min": 0.0,
+  "gradif_gamma_max": 0.12,
+  "gradif_expert_scale_init": 0.35,
+  "gradif_expert_scale_max": 1.0,
+  "gradif_generic_mlp_bottleneck": 96,
+  "gradif_use_granularity_prior": false,
+  "classification_gradif_fusion_init": 0.25,
+  "classification_gradif_max_delta_ratio": 0.06,
+  "segmentation_gradif_fusion_init": 0.85,
+  "segmentation_gradif_max_delta_ratios": [0.05, 0.04, 0.05],
+  "report_num_beams": 3,
+  "report_max_new_tokens": 180,
+  "report_do_sample": false
+}

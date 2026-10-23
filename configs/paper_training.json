@@ -1,0 +1,64 @@
+{
+  "paths": {
+    "data_root": "../data/data_detection",
+    "medclip_weights": "../checkpoints/pytorch_model.bin",
+    "dino_repo": "../third_party/DINO",
+    "dino_config": "../third_party/DINO/config/DINO/DINO_4scale_swin.py",
+    "dino_checkpoint": "../third_party/DINO/pretrained/checkpoint0029_4scale_swin.pth",
+    "output_dir": "../outputs/runs"
+  },
+  "training": {
+    "epochs": 100,
+    "seeds": [42, 123, 2026],
+    "image_size": [224, 224],
+    "interpolation": "bicubic",
+    "normalization_mean": [0.485, 0.456, 0.406],
+    "normalization_std": [0.229, 0.224, 0.225],
+    "batch_size": 8,
+    "modality_batch_counts": {
+      "xray": 2,
+      "ct": 2,
+      "mri": 2,
+      "ultrasound": 2
+    },
+    "gradient_accumulation_steps": 4,
+    "effective_batch_size": 32,
+    "batches_per_epoch": 500,
+    "optimizer": "AdamW",
+    "weight_decay": 0.05,
+    "learning_rates": {
+      "backbone": 0.000005,
+      "mofx": 0.0002,
+      "segmentation": 0.0005,
+      "classification": 0.0002,
+      "report": 0.0001,
+      "detector": 0.0002
+    },
+    "scheduler": {
+      "name": "ReduceLROnPlateau",
+      "factor": 0.5,
+      "patience": 8,
+      "threshold": 0.0001
+    },
+    "llm_model_name": "meta-llama/Llama-3.2-1B-Instruct",
+    "mixed_precision": true,
+    "checkpoint_selection": "mean_validation_score"
+  },
+  "model": {
+    "name": "MoFX-Dense",
+    "encoder": "Swin-Tiny",
+    "decomposition": "fixed_gaussian_3x3_5x5",
+    "routing": "dense_softmax",
+    "router": "content_task_modality_factorized_multigate",
+    "directed_experts": [
+      "low_to_high",
+      "mid_to_high",
+      "high_to_mid",
+      "high_to_low"
+    ],
+    "identity_route": true,
+    "generalist_expert": false,
+    "active_stages": ["c2", "c3", "c4_semantic"],
+    "multitask_optimization": "standard_joint"
+  }
+}

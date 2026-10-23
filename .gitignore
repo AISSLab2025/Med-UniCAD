@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local data, checkpoints, and generated runs are not part of the paper source.
+data/
+checkpoints/
+outputs/
+runs/
+*.pth
+*.pt
+*.ckpt
+
+# Local secrets and machine-specific configuration.
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

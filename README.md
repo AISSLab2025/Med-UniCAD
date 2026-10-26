@@ -86,8 +86,7 @@ python scripts/train.py --config configs/paper_training.json --seed 2026
 ```
 
 Each run performs 100 epochs with per-step batch size 8 and four-step gradient
-accumulation (effective batch size 32). Every microbatch contains two X-ray,
-two CT, two MRI, and two ultrasound samples; consequently, each accumulated
+accumulation (effective batch size 32). Each accumulated
 batch contains eight samples from every modality. Fresh training is the default; no
 experimental initializer is exposed by the public runner.
 
@@ -140,20 +139,10 @@ substitute for clinical review.
 ## Reproducibility notes
 
 - Image size: 224x224, bicubic interpolation, pretrained encoder normalization.
-- Optimizer: AdamW with weight decay 0.05.
-- Batch composition: 2 X-ray + 2 CT + 2 MRI + 2 ultrasound samples per
-  microbatch; MRI supervision pools rotate evenly across batches.
-- Learning rates: backbone 5e-6; MoFX 2e-4; segmentation 5e-4;
-  classification 2e-4; report modules 1e-4; detector 2e-4.
 - Report decoder: frozen Llama-3.2-1B-Instruct backbone with LoRA adaptation.
-- Report training: at least one supervised report in every microbatch; no
-  report-path subsampling.
 - Report evaluation: ROUGE-L and METEOR.
 - Checkpoint selection: mean validation score across segmentation,
   classification, detection, ROI classification, and report generation.
-- Standard joint multitask optimization is used; gradient-surgery implementations
-  are not included in the release pipeline.
-- Random geometric augmentation is synchronized between images and their masks.
 
 ## Current scope
 

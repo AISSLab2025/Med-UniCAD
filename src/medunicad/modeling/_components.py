@@ -11,6 +11,7 @@ import torch.utils.checkpoint as checkpoint
 import numpy as np
 import math
 import os
+from pathlib import Path
 from torchvision.ops import batched_nms
 from medunicad.losses.box_ops import *
 from torchvision.ops import roi_align
@@ -126,7 +127,7 @@ class WindowAttention(nn.Module):
             torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads))
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -750,7 +751,7 @@ class PretrainedReportDecoder(nn.Module):
 
         # ---- Base LLM in FP16 ----
         self.decoder = AutoModelForCausalLM.from_pretrained(
-            llm_model_name, torch_dtype=torch.float16
+            llm_model_name, dtype=torch.float16
         )
         self.decoder.to("cuda")
 
@@ -836,18 +837,19 @@ class PretrainedReportDecoder(nn.Module):
         else:
             combined_mask = None
 
-        return self.decoder.generate(
+        generation_kwargs = dict(
             inputs_embeds=inputs_embeds,
             attention_mask=combined_mask,
             max_new_tokens=self.max_len,
             num_beams=num_beams,
             do_sample=do_sample,
-            temperature=0.4,
-            top_p=0.95,
             repetition_penalty=1.3,
             pad_token_id=self.tokenizer.eos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
         )
+        if do_sample:
+            generation_kwargs.update(temperature=0.4, top_p=0.95)
+        return self.decoder.generate(**generation_kwargs)
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
@@ -2101,6 +2103,18 @@ class MoFXDenseBlock(nn.Module):
         self.latest_task_branch_logits = {}
         self.latest_modality_branch_logits = {}
         self.latest_branch_alphas = {}
+        # Detailed expert diagnostics are optional during ordinary training,
+        # but reset_runtime_state() clears them unconditionally on every
+        # forward pass.  Initialize each store here so the first batch can
+        # enter the router even when detailed collection is disabled.
+        self.latest_expert_band_rms = {}
+        self.latest_expert_band_fractions = {}
+        self.latest_expert_target_fraction = {}
+        self.latest_expert_target_dominant = {}
+        self.latest_expert_source_cosine = {}
+        self.latest_expert_target_cosine = {}
+        self.latest_expert_applied_scale = {}
+        self.latest_expert_visuals = {}
         self.latest_base_rms = None
         self.latest_band_energies = None
         self._latest_logit_magnitude_terms = []
@@ -3714,8 +3728,35 @@ class SharedBackboneOfficialDINO(nn.Module):
     ):
         super().__init__()
 
-        if repo_path not in sys.path:
-            sys.path.insert(0, repo_path)
+        # The official repository is a directory named ``DINO`` containing
+        # ``util/`` and ``models/``. Imports use the ``DINO.*`` namespace, so
+        # Python needs both the repository parent (for DINO.*) and the
+        # repository itself (for absolute util/models imports inside DINO).
+        # Resolve these paths explicitly instead of relying on the process CWD.
+        dino_repo = Path(repo_path).expanduser().resolve()
+        if not (dino_repo / "util" / "slconfig.py").is_file():
+            nested_repo = dino_repo / "DINO"
+            if (nested_repo / "util" / "slconfig.py").is_file():
+                dino_repo = nested_repo
+            else:
+                raise FileNotFoundError(
+                    "Invalid DINO repository path. Expected util/slconfig.py "
+                    f"under: {dino_repo}"
+                )
+        if dino_repo.name.lower() != "dino":
+            raise ValueError(
+                "The official DINO checkout directory must be named 'DINO' "
+                "because the model imports the DINO package namespace; got "
+                f"{dino_repo.name!r}."
+            )
+        for import_path in (dino_repo, dino_repo.parent):
+            import_path_str = str(import_path)
+            if import_path_str not in sys.path:
+                sys.path.insert(0, import_path_str)
+        print(
+            f"[DINO] repository={dino_repo} | "
+            f"package_root={dino_repo.parent}"
+        )
 
         from DINO.util.slconfig import SLConfig
         from DINO.util.misc import NestedTensor, inverse_sigmoid

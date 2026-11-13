@@ -12,6 +12,7 @@ data/
 checkpoints/
 outputs/
 runs/
+third_party/
 *.pth
 *.pt
 *.ckpt

@@ -65,6 +65,10 @@ def set_reproducibility(seed=42, deterministic=True):
     """Seed model and data operations for reproducible paper runs."""
     seed = int(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
+    if deterministic:
+        # Required by PyTorch for deterministic CUDA matrix multiplications.
+        # setdefault preserves an explicit value supplied by the reviewer.
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -309,7 +313,6 @@ class ExperimentManager:
                 "image_path": str(image_path),
                 "gt_report": gt_text,
                 "pred_report": pred_text,
-                "bleu": float(scores.get("bleu", 0.0)),
                 "meteor": float(scores.get("meteor", 0.0)),
                 "rougeL": float(scores.get("rouge", 0.0)),
             }
@@ -3864,7 +3867,7 @@ def validate(model, loader, device, loss_fns, manager=None, epoch=0, tokenizer=N
                     if "dn_meta" in outputs["detection"]:
                         det_out["dn_meta"] = outputs["detection"]["dn_meta"]
 
-                    with torch.cuda.amp.autocast(enabled=False):
+                    with torch.amp.autocast("cuda", enabled=False):
                         det_loss_dict, indices_list = model.detector.compute_loss(
                             det_out,
                             det_targets_active,
@@ -6257,7 +6260,7 @@ def test_multitask(
                         pred_text=pred_text,
                         idx=i * len(imgs) + idx,
                         ds_name=d_name,
-                        scores={"bleu": b_score, "meteor": m_score, "rouge": r_score},
+                        scores={"meteor": m_score, "rouge": r_score},
                         extra={
                             "GT_Labels": gt_tags_str,
                             "AI_Predicted_Labels": ai_tags_str,
@@ -8464,7 +8467,9 @@ def dataset_membership_fingerprint(dataset):
 
 
 def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path, dino_pretrain_path, use_report_label_guidance,
+                 use_cross_roi_reasoning=True,
                  epochs=100, debug=False, target_size=(224, 224), use_moe=True, resume=False, resume_run_id=None, ACCUM_STEPS=4,
+                 test_only=False,
                  learning_rates=None,
                  weight_decay=0.05,
                  scheduler_factor=0.5,
@@ -8524,12 +8529,14 @@ def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path,
                  gradif_gate_weight=0.0,
                  gradif_router_conditioning_weight=0.0,  # no routing-shape penalty
                  gradif_logit_magnitude_weight=0.0,
+                 gradif_runtime_stats_every=20,
                  gradif_regularization_warmup=6,
                  gradif_classification_base_aux_weight=0.0,
                  gradif_classification_no_harm_weight=0.0,
                  gradif_segmentation_no_harm_weight=0.0,
                  gradif_no_harm_start_epoch=8,
                  gradif_no_harm_ramp_epochs=6,
+                 gradif_no_harm_every=2,
                  gradif_spatial_gate_identity_weight=0.0,
                  classification_gradif_fusion_init=0.25,
                  classification_gradif_max_delta_ratio=0.06,
@@ -8553,7 +8560,15 @@ def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path,
                  run_base_dir="outputs/runs",
                  run_study_name="paper_release/final_mofx_dense",
                  gradif_active_stages=("c2", "c3", "c4_semantic"),
-                  ):
+                 ):
+    # The original monolithic script read an uppercase module global created in
+    # its __main__ block. The modular runner passes this setting explicitly, so
+    # keep it local and import-safe.
+    use_report_label_guidance = bool(use_report_label_guidance)
+    use_cross_roi_reasoning = bool(use_cross_roi_reasoning)
+    test_only = bool(test_only)
+    if test_only and not resume_run_id:
+        raise ValueError("test_only requires an existing resume_run_id.")
     paper_lrs = {
         "backbone": 5e-6,
         "mofx": 2e-4,
@@ -8718,9 +8733,9 @@ def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path,
     # ------------------------------------------------------------
     # Dataset Setup
     # ------------------------------------------------------------
-    train_ds = UnifiedMedicalDataset(data_root, split='train', transform_dict=transform_dict, tokenizer=tokenizer, target_size=target_size, cache_images_in_ram=False, cache_targets_in_ram=True, use_report_label_guidance=USE_REPORT_LABEL_GUIDANCE)
-    val_ds = UnifiedMedicalDataset(data_root, split='val', transform_dict=val_transform_dict, tokenizer=tokenizer, target_size=target_size, cache_images_in_ram=True, cache_targets_in_ram=True, use_report_label_guidance=USE_REPORT_LABEL_GUIDANCE)
-    test_ds = UnifiedMedicalDataset(data_root, split='test', transform_dict=val_transform_dict, tokenizer=tokenizer, target_size=target_size, cache_images_in_ram=True, cache_targets_in_ram=True, use_report_label_guidance=USE_REPORT_LABEL_GUIDANCE)
+    train_ds = UnifiedMedicalDataset(data_root, split='train', transform_dict=transform_dict, tokenizer=tokenizer, target_size=target_size, cache_images_in_ram=False, cache_targets_in_ram=True, use_report_label_guidance=use_report_label_guidance)
+    val_ds = UnifiedMedicalDataset(data_root, split='val', transform_dict=val_transform_dict, tokenizer=tokenizer, target_size=target_size, cache_images_in_ram=True, cache_targets_in_ram=True, use_report_label_guidance=use_report_label_guidance)
+    test_ds = UnifiedMedicalDataset(data_root, split='test', transform_dict=val_transform_dict, tokenizer=tokenizer, target_size=target_size, cache_images_in_ram=True, cache_targets_in_ram=True, use_report_label_guidance=use_report_label_guidance)
 
     _dataset_fingerprints = {
         "train": dataset_membership_fingerprint(train_ds),
@@ -8932,7 +8947,7 @@ def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path,
         dino_cfg_path=dino_cfg_path,
         dino_pretrained_path=dino_pretrain_path,
         use_official_dino=True,
-        use_cross_roi_reasoning=USE_CROSS_ROI_REASONING,
+        use_cross_roi_reasoning=use_cross_roi_reasoning,
         llm_model_name=llm_model_name,
         birads_bias_init=_birads_bias_init,
         pathology_bias_init=_pathology_bias_init,
@@ -9150,12 +9165,21 @@ def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path,
         threshold=float(scheduler_threshold),
     )
     use_amp = bool(mixed_precision and device == "cuda")
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     loss_fns = {'seg_bce': nn.BCEWithLogitsLoss(), 'seg_dice': DiceLoss(), 'cls_focal': AdaptiveFocalLoss(alpha=0.5, gamma=2.0, label_smoothing=0.05)}
            
     # --- RESUME LOAD LOGIC ---
     start_epoch = 0
-    if resume:
+    if test_only:
+        # Final evaluation always starts from the selected best checkpoint.
+        # Do not load the much larger rich last_model checkpoint or its optimizer
+        # state; the common testing tail below loads best_model.pth directly.
+        start_epoch = int(epochs)
+        print(
+            f"[Test-only] Skipping training for existing run "
+            f"'{resume_run_id}'."
+        )
+    elif resume:
         resume_path = os.path.join(manager.ckpt_dir, "last_model.pth")
         if os.path.isfile(resume_path):
             print(f"loading checkpoint '{resume_path}'")
@@ -9245,7 +9269,10 @@ def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path,
     _optimizer_step_count = 0
     _skipped_bad_grad_steps = 0
     _empty_gradient_windows = 0
-    print("\n=== Training Started ===")
+    if test_only:
+        print("\n=== Final Validation Calibration and Testing ===")
+    else:
+        print("\n=== Training Started ===")
     for epoch in range(start_epoch, epochs):
         _current_gradif_cls_no_harm_weight = 0.0
         _current_gradif_seg_no_harm_weight = 0.0
@@ -9918,7 +9945,7 @@ def run_pipeline(data_root, medclip_weights_path, dino_repo_path, dino_cfg_path,
                         if "dn_meta" in det_out_src:
                             det_out["dn_meta"] = det_out_src["dn_meta"]
 
-                        with torch.cuda.amp.autocast(enabled=False):                                  
+                        with torch.amp.autocast("cuda", enabled=False):                                  
                             det_loss_dict, indices_list = model.detector.compute_loss(
                                 det_out,
                                 det_targets_active,

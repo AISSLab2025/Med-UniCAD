@@ -62,6 +62,10 @@ Python 3.10 or newer is required. Install in editable mode:
 python -m pip install -e ".[train,api]"
 ```
 
+The public scripts also add the repository's `src/` directory when executed
+directly from a checkout. An editable installation is still recommended because
+it installs and validates the required third-party dependencies.
+
 PyTorch wheels are platform- and CUDA-specific. If the pinned default wheel is
 not appropriate for your system, install the matching PyTorch build first, then
 install this project.
@@ -84,6 +88,18 @@ python scripts/train.py --config configs/paper_training.json --seed 42
 python scripts/train.py --config configs/paper_training.json --seed 123
 python scripts/train.py --config configs/paper_training.json --seed 2026
 ```
+
+If training has completed but final testing was interrupted, rerun only the
+validation calibration and complete test traversal in the original run directory:
+
+```bash
+python scripts/train.py --config configs/paper_training.json --seed 42 \
+  --resume-run 2026-10-27_00-39-54 --test-only
+```
+
+Test-only resume loads `checkpoints/best_model.pth`, skips every training epoch,
+and restarts evaluation from the beginning so partial test outputs cannot be mixed
+with a completed result. Replace the run ID and seed with those of the target run.
 
 Each run performs 100 epochs with per-step batch size 8 and four-step gradient
 accumulation (effective batch size 32). Each accumulated
